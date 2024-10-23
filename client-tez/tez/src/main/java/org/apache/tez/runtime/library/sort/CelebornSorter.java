@@ -74,7 +74,6 @@ public class CelebornSorter extends ExternalSorter {
             mapOutputRecordCounter,
             celebornTezWriter,
             celebornConf);
-    LOG.info("Initialized WriteBufferManager.");
   }
 
   @Override

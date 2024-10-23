@@ -37,7 +37,7 @@ public class CelebornTezBypassWriter {
   private static final byte[] HEADER = new byte[] {(byte) 'T', (byte) 'I', (byte) 'F', (byte) 0};
 
   public static void write(MapOutput mapOutput, byte[] buffer) {
-    LOG.info(
+    LOG.debug(
         "CelebornTezBypassWriter write mapOutput, type:{}, buffer length:{}",
         mapOutput.getType(),
         buffer.length);
