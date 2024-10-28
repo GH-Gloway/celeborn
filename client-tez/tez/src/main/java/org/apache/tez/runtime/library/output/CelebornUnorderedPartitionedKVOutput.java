@@ -48,7 +48,7 @@ import org.apache.tez.runtime.library.sort.CelebornTezPerPartitionRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.celeborn.client.ShuffleClient;
+import org.apache.celeborn.client.CelebornTezWriter;
 import org.apache.celeborn.common.CelebornConf;
 import org.apache.celeborn.common.identity.UserIdentifier;
 import org.apache.celeborn.tez.plugin.util.CelebornTezUtils;
@@ -122,12 +122,18 @@ public class CelebornUnorderedPartitionedKVOutput extends AbstractLogicalOutput 
     if (!isStarted.get()) {
       memoryUpdateCallbackHandler.validateUpdateReceived();
       CelebornConf celebornConf = CelebornTezUtils.fromTezConfiguration(conf);
-      ShuffleClient shuffleClient =
-          ShuffleClient.get(
+      CelebornTezWriter celebornTezWriter =
+          new CelebornTezWriter(
+              shuffleId,
+              mapId,
+              mapId,
+              attemptId,
+              numMapppers,
+              numOutputs,
+              celebornConf,
               appId,
               host,
               port,
-              celebornConf,
               new UserIdentifier(
                   celebornConf.quotaUserSpecificTenant(),
                   celebornConf.quotaUserSpecificUserName()));
@@ -136,13 +142,8 @@ public class CelebornUnorderedPartitionedKVOutput extends AbstractLogicalOutput 
               getContext(),
               conf,
               numOutputs,
-              numOutputs,
               memoryUpdateCallbackHandler.getMemoryAssigned(),
-              shuffleClient,
-              shuffleId,
-              mapId,
-              attemptId,
-              numMapppers,
+              celebornTezWriter,
               celebornConf);
       isStarted.set(true);
     }

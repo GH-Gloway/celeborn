@@ -20,7 +20,7 @@ package org.apache.celeborn.tests.tez;
 import org.apache.hadoop.util.Tool;
 import org.junit.Test;
 
-public class BroadcastAndOneToOneTest extends TezIntegrationTestBase {
+public class BroadcastAndOneToOneTest2 extends TezIntegrationTestBase2 {
   public static final String outputPath = "broadcast_oneone_output";
 
   @Test

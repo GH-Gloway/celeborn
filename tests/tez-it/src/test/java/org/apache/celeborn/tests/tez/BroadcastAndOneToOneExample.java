@@ -35,12 +35,14 @@ import org.apache.tez.dag.api.*;
 import org.apache.tez.dag.api.client.DAGClient;
 import org.apache.tez.dag.api.client.DAGStatus;
 import org.apache.tez.dag.library.vertexmanager.InputReadyVertexManager;
+import org.apache.tez.runtime.api.LogicalOutput;
 import org.apache.tez.runtime.api.ObjectRegistry;
 import org.apache.tez.runtime.api.ProcessorContext;
 import org.apache.tez.runtime.library.api.KeyValueReader;
 import org.apache.tez.runtime.library.api.KeyValueWriter;
 import org.apache.tez.runtime.library.conf.UnorderedKVEdgeConfig;
 import org.apache.tez.runtime.library.output.CelebornUnorderedKVOutput;
+import org.apache.tez.runtime.library.output.UnorderedKVOutput;
 import org.apache.tez.runtime.library.processor.SimpleProcessor;
 
 public class BroadcastAndOneToOneExample extends Configured implements Tool {
@@ -203,9 +205,13 @@ public class BroadcastAndOneToOneExample extends Configured implements Tool {
     @Override
     public void run() throws Exception {
       Preconditions.checkArgument(getOutputs().size() == 1);
-      CelebornUnorderedKVOutput output =
-          (CelebornUnorderedKVOutput) getOutputs().values().iterator().next();
-      KeyValueWriter kvWriter = (KeyValueWriter) output.getWriter();
+      LogicalOutput next = getOutputs().values().iterator().next();
+      KeyValueWriter kvWriter;
+      if (next instanceof UnorderedKVOutput) {
+        kvWriter = ((UnorderedKVOutput)next).getWriter();
+      } else {
+        kvWriter = ((CelebornUnorderedKVOutput)next).getWriter();
+      }
       kvWriter.write(word, new IntWritable(getContext().getTaskIndex()));
       ByteBuffer userPayload =
           getContext().getUserPayload() == null ? null : getContext().getUserPayload().getPayload();

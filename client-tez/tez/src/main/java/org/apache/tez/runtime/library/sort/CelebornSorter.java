@@ -73,7 +73,8 @@ public class CelebornSorter extends ExternalSorter {
             mapOutputByteCounter,
             mapOutputRecordCounter,
             celebornTezWriter,
-            celebornConf);
+            celebornConf,
+            true);
   }
 
   @Override

@@ -20,6 +20,8 @@ package org.apache.tez.runtime.library.sort;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.hadoop.io.RawComparator;
@@ -43,12 +45,16 @@ public class CelebornSortBasedPusher<K, V> extends OutputStream {
   private final Serializer<V> vSer;
   private final RawComparator<K> comparator;
   private final AtomicReference<Exception> exception = new AtomicReference<>();
+  private final int numOutputs;
   private final TezCounter mapOutputByteCounter;
   private final TezCounter mapOutputRecordCounter;
   private final Map<Integer, List<SerializedKV>> partitionedKVs;
   private int writePos;
   private byte[] serializedKV;
   private final int maxPushDataSize;
+  private Map<Integer, AtomicInteger> recordsPerPartition = new HashMap<>();
+  private Map<Integer, AtomicLong> bytesPerPartition = new HashMap<>();
+  private final boolean needSort;
 
   public CelebornSortBasedPusher(
       Serializer<K> kSer,
@@ -59,7 +65,8 @@ public class CelebornSortBasedPusher<K, V> extends OutputStream {
       TezCounter mapOutputByteCounter,
       TezCounter mapOutputRecordCounter,
       CelebornTezWriter celebornTezWriter,
-      CelebornConf celebornConf) {
+      CelebornConf celebornConf,
+      boolean needSort) {
     this.kSer = kSer;
     this.vSer = vSer;
     this.maxIOBufferSize = maxIOBufferSize;
@@ -68,6 +75,8 @@ public class CelebornSortBasedPusher<K, V> extends OutputStream {
     this.mapOutputRecordCounter = mapOutputRecordCounter;
     this.comparator = comparator;
     this.celebornTezWriter = celebornTezWriter;
+    this.needSort = needSort;
+    this.numOutputs = celebornTezWriter.getNumPartitions();
     partitionedKVs = new HashMap<>();
     serializedKV = new byte[maxIOBufferSize];
     maxPushDataSize = (int) celebornConf.clientMrMaxPushData();
@@ -90,10 +99,23 @@ public class CelebornSortBasedPusher<K, V> extends OutputStream {
               Utils.bytesToString(spillIOBufferSize),
               Utils.bytesToString(maxIOBufferSize));
         }
-        sortKVs();
+        if (needSort) {
+          sortKVs();
+        }
         sendKVAndUpdateWritePos();
       }
       int dataLen = insertRecordInternal(key, value, partition);
+      if (numOutputs == 1 && !needSort) {
+        recordsPerPartition.putIfAbsent(0, new AtomicInteger());
+        bytesPerPartition.putIfAbsent(0, new AtomicLong());
+        recordsPerPartition.get(0).incrementAndGet();
+        bytesPerPartition.get(0).incrementAndGet();
+      } else {
+        recordsPerPartition.computeIfAbsent(partition, p -> new AtomicInteger());
+        bytesPerPartition.computeIfAbsent(partition, p -> new AtomicLong());
+        recordsPerPartition.get(partition).incrementAndGet();
+        bytesPerPartition.get(partition).incrementAndGet();
+      }
       if (logger.isDebugEnabled()) {
         logger.debug(
             "Sort based pusher insert into partition:{} with {} bytes", partition, dataLen);
@@ -264,7 +286,9 @@ public class CelebornSortBasedPusher<K, V> extends OutputStream {
   public void flush() {
     logger.info("Sort based pusher called flush");
     try {
-      sortKVs();
+      if (needSort) {
+        sortKVs();
+      }
       sendKVAndUpdateWritePos();
     } catch (IOException e) {
       exception.compareAndSet(null, e);
@@ -281,6 +305,32 @@ public class CelebornSortBasedPusher<K, V> extends OutputStream {
     }
     partitionedKVs.clear();
     serializedKV = null;
+  }
+
+  public int[] getRecordsPerPartition() {
+    int[] values = new int[numOutputs];
+    for (int i = 0; i < numOutputs; i++) {
+      AtomicInteger records = recordsPerPartition.get(i);
+      if (records != null) {
+        values[i] = recordsPerPartition.get(i).get();
+      } else {
+        values[i] = 0;
+      }
+    }
+    return values;
+  }
+
+  public long[] getBytesPerPartition() {
+    long[] values = new long[numOutputs];
+    for (int i = 0; i < numOutputs; i++) {
+      AtomicLong bytes = bytesPerPartition.get(i);
+      if (bytes != null) {
+        values[i] = bytes.get();
+      } else {
+        values[i] = 0;
+      }
+    }
+    return values;
   }
 
   static class SerializedKV {

@@ -17,6 +17,8 @@
 
 package org.apache.tez.runtime.library.common.writers;
 
+import static org.apache.celeborn.tez.plugin.util.CelebornTezUtils.*;
+
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -38,11 +40,12 @@ import org.apache.tez.runtime.library.api.Partitioner;
 import org.apache.tez.runtime.library.api.TezRuntimeConfiguration;
 import org.apache.tez.runtime.library.common.ConfigUtils;
 import org.apache.tez.runtime.library.common.TezRuntimeUtils;
+import org.apache.tez.runtime.library.sort.CelebornSortBasedPusher;
 import org.apache.tez.runtime.library.utils.CodecUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.celeborn.client.ShuffleClient;
+import org.apache.celeborn.client.CelebornTezWriter;
 import org.apache.celeborn.common.CelebornConf;
 
 public class CelebornUnorderedPartitionedKVWriter extends KeyValuesWriter {
@@ -74,7 +77,7 @@ public class CelebornUnorderedPartitionedKVWriter extends KeyValuesWriter {
 
   final TezRuntimeConfiguration.ReportPartitionStats reportPartitionStats;
 
-  private CelebornUnorderedSortBasedPusher pusher;
+  private CelebornSortBasedPusher pusher;
 
   static final ThreadLocal<Deflater> deflater =
       new ThreadLocal<Deflater>() {
@@ -96,13 +99,8 @@ public class CelebornUnorderedPartitionedKVWriter extends KeyValuesWriter {
       OutputContext outputContext,
       Configuration conf,
       int numOutputs,
-      int numPartitions,
       long availableMemoryBytes,
-      ShuffleClient shuffleClient,
-      int shuffleId,
-      int mapId,
-      int attemptId,
-      int numMappers,
+      CelebornTezWriter celebornTezWriter,
       CelebornConf celebornConf) {
     this.outputContext = outputContext;
     this.conf = conf;
@@ -159,19 +157,17 @@ public class CelebornUnorderedPartitionedKVWriter extends KeyValuesWriter {
       availableMemory = 64 * 1024 * 1024;
     }
     pusher =
-        new CelebornUnorderedSortBasedPusher(
-            shuffleId,
-            numMappers,
-            numPartitions,
-            numOutputs,
-            mapId,
-            attemptId,
+        new CelebornSortBasedPusher(
             keySerializer,
             valSerializer,
             (int) availableMemory,
             (int) (availableMemory * 0.8),
-            shuffleClient,
-            celebornConf);
+            null,
+            outputRecordBytesCounter,
+            outputRecordsCounter,
+            celebornTezWriter,
+            celebornConf,
+            false);
   }
 
   @Override
@@ -197,9 +193,6 @@ public class CelebornUnorderedPartitionedKVWriter extends KeyValuesWriter {
   }
 
   private void updateTezCountersAndNotify() {
-    outputRecordBytesCounter.increment(pusher.getMapOutputByteCounter().sum());
-    outputBytesWithOverheadCounter.increment(pusher.getMapOutputByteCounter().sum());
-    outputRecordsCounter.increment(pusher.getMapOutputRecordCounter().sum());
     numRecordsPerPartition = pusher.getRecordsPerPartition();
     if (sizePerPartition != null) {
       sizePerPartition = pusher.getBytesPerPartition();

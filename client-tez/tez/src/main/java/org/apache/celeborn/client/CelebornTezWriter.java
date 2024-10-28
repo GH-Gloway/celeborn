@@ -106,6 +106,10 @@ public class CelebornTezWriter {
             numPartitions);
   }
 
+  public int getNumPartitions() {
+    return numPartitions;
+  }
+
   public void close() throws IOException {
     logger.info(
         "Call mapper end shuffleId:{} mapId:{} attemptId:{} numMappers:{}",
